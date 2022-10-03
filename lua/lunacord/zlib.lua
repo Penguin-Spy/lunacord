@@ -1,5 +1,5 @@
 --[[
-  zlib.lua  zlib implementation in pure Lua, compatible with LuaJIT
+  zlib.lua  zlib implementation in pure Lua 5.4
   Copyright (c)  Penguin_Spy 2022
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -23,7 +23,6 @@
 
 local zlib = {}
 
-local lshift, rshift, band, bxor = bit.lshift, bit.rshift, bit.band, bit.bxor
 local byte, char, sub = string.byte, string.char, string.sub
 
 -- [=[ BITSTREAM READING ]=]
@@ -41,14 +40,14 @@ local function peekBits(stream, bit_count)
       error("[zlib-deflate] Unexpected EOF while decompressing")
     end
     -- get new byte, put it to the right (less significant) of current bit buffer
-    stream.bits = stream.bits + lshift(byte(stream.buffer, stream.pos), stream.bit_count)
+    stream.bits = stream.bits + (byte(stream.buffer, stream.pos) << stream.bit_count)
     -- inc pointer thingys
     stream.pos = stream.pos + 1
     stream.bit_count = stream.bit_count + 8
   end
 
   -- cut off the least significant bits in the buffer that aren't requested
-  return band(stream.bits, lshift(1, bit_count) - 1)
+  return stream.bits & ((1 << bit_count) - 1)
 end
 
 --
@@ -62,7 +61,7 @@ local function getBits(stream, bit_count)
 
   -- remove the requested bits from the buffer
   stream.bit_count = stream.bit_count - bit_count
-  stream.bits = rshift(stream.bits, bit_count)
+  stream.bits = stream.bits >> bit_count
 
   return bits
 end
@@ -90,7 +89,7 @@ local function addNode(root, num_bits, code_bits, symbol)
   root = root or {}
 
   if num_bits > 0 then -- more bits to read to make the path
-    if band(code_bits, 2 ^ (num_bits - 1)) == 0 then
+    if code_bits & (2 ^ (num_bits - 1)) == 0 then
       root.left = addNode(root.left, num_bits - 1, code_bits, symbol)
     else
       root.right = addNode(root.right, num_bits - 1, code_bits, symbol)
@@ -194,7 +193,7 @@ local function createCodeTable(code_lengths)
   local code = 0
   local next_code = {}
   for bits = 1, maxLength + 1 do
-    code = lshift(code + (bl_count[bits - 1] or 0), 1)
+    code = (code + (bl_count[bits - 1] or 0)) << 1
     next_code[bits] = code
   end
 
@@ -275,7 +274,7 @@ end
 --
 local function decompressStore(stream)
   flushToByte(stream)
-  local length, inverse_length = getBits(stream, 16), bxor(getBits(stream, 16), 0x0000ffff)
+  local length, inverse_length = getBits(stream, 16), getBits(stream, 16) ~ 0x0000ffff
 
   if not (length == inverse_length) then
     error("[zlib-deflate] Invalid length for block type 0 (" .. length .. " does not match " .. inverse_length .. ")")

@@ -1,8 +1,11 @@
+---@diagnostic disable: lowercase-global
+
 package = "Lunacord"
-version = "scm"
+version = "scm-1"
 source = {
   url = "git://github.com/Penguin-Spy/lunacord"
 }
+
 description = {
   summary = "A simple, convenient Discord bot library in pure Lua",
   detailed = [[
@@ -14,8 +17,11 @@ description = {
   license = "MIT"
 }
 dependencies = {
-  "lua >= 5.1"
+  "lua >= 5.1",
+  "lua-websockets",
+  "lunajson"
 }
+
 build = {
   type = "builtin",
   modules = {}
