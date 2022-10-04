@@ -3,8 +3,7 @@ local json = require 'lunajson'
 local zlib = require 'lunacord.zlib'
 local dump = require 'lunacord.dump'
 
---local gateway_uri = "wss://gateway.discord.gg/?encoding=json&v=9&compress=zlib-stream"
-local gateway_uri = "wss://gateway.discord.gg/?encoding=json&v=9"
+local gateway_uri = "wss://gateway.discord.gg/?encoding=json&v=9&compress=zlib-stream"
 local ssl_params = { mode = "client", protocol = "any" }
 
 -- the Client class
@@ -33,10 +32,10 @@ function Client:connect(token)
 
   local sucess, err, res = self.ws:connect(gateway_uri, nil, ssl_params)
   if not sucess then
-    print("[lunacord] websocket connection error: " .. err)
-    print("response headers:")
-    dump(res)
-    return nil, "upgrade failed"
+    error(dump("[lunacord] WebSocket connection error: " .. err,
+      "response headers:",
+      res
+    ))
   end
   print("response headers:")
   dump(res)
@@ -47,15 +46,17 @@ function Client:connect(token)
   while true do
     local payload, opcode, was_clean, code, reason = self.ws:receive()
     if payload then
-      print("[" .. opcode .. "] " .. payload)
-      --local decompressed = zlib.decompress(payload)
-      --print(decompressed)
-      --local data = json.decode(decompressed)
-      local data = json.decode(payload)
-      dump(data)
+      local data
+      if opcode == 1 then -- text frame
+        data = json.decode(payload)
+      elseif opcode == 2 then -- binary frame (zlib compressed)
+        data = json.decode(zlib.decompress(payload))
+      else
+        return nil, "invalid opcode: " .. tostring(opcode)
+      end
+      dump("[" .. opcode .. "] ", data)
     else
-      print("[Disconnected] was_clean=" .. tostring(was_clean) .. " code=" .. code .. " reason=" .. reason
-      )
+      print("[Disconnected] was_clean=" .. tostring(was_clean) .. " code=" .. code .. " reason=" .. reason)
       return code, reason
     end
   end
