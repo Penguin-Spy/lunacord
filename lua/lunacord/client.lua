@@ -1,10 +1,8 @@
-local websocket = require 'websocket.client'
-local json = require 'lunajson'
-local zlib = require 'lunacord.zlib'
-local dump = require 'lunacord.dump'
+local copas = require("copas")
+local timer = require("copas.timer")
 
-local gateway_uri = "wss://gateway.discord.gg/?encoding=json&v=9&compress=zlib-stream"
-local ssl_params = { mode = "client", protocol = "any" }
+local discord_socket = require 'lunacord.discord_socket'
+local dump = require 'lunacord.dump'
 
 -- the Client class
 local Client = {}
@@ -22,44 +20,61 @@ end
 --- Connects to discord, handling all registered events. \
 --- This method does not return until the client disconnects.
 --- @param token string The bot token to authorize with
---- @return any code The disconnection code, or nil if the connection failed
---- @return string reason The provided reason for the disconnection
----
-function Client:connect(token)
-  dump(self)
-  self.token = token
-  self.ws = websocket.new()
+--
+function Client.connect(self, token)
 
-  local sucess, err, res = self.ws:connect(gateway_uri, nil, ssl_params)
-  if not sucess then
-    error(dump("[lunacord] WebSocket connection error: " .. err,
-      "response headers:",
-      res
-    ))
-  end
-  print("response headers:")
-  dump(res)
+  copas.addthread(function()
+    self.token = token
+    self.ds = discord_socket()
 
-  print("self after:")
-  dump(self)
+    self.ds:connect()
 
-  while true do
-    local payload, opcode, was_clean, code, reason = self.ws:receive()
-    if payload then
-      local data
-      if opcode == 1 then -- text frame
-        data = json.decode(payload)
-      elseif opcode == 2 then -- binary frame (zlib compressed)
-        data = json.decode(zlib.decompress(payload))
-      else
-        return nil, "invalid opcode: " .. tostring(opcode)
-      end
-      dump("[" .. opcode .. "] ", data)
+    -- receive & handle hello event
+    local hello = self.ds:receive()
+    dump("hello", hello)
+    if hello and hello.op == 10 then
+      local heartbeat_interval = hello.d.heartbeat_interval
+      dump("heartbeat_interval", heartbeat_interval)
+
+      --[=[copas(function()
+        timer.new {
+          delay = heartbeat_interval / 1000,
+          recurring = true,
+          callback = function(timer)
+            dump("self", self)
+            dump("timer", timer)
+            --[[self.ds:send({
+
+            })]]
+          end
+        }
+      end)]=]
     else
-      print("[Disconnected] was_clean=" .. tostring(was_clean) .. " code=" .. code .. " reason=" .. reason)
-      return code, reason
+      error("[lunacord] did not recieve hello event as first event")
     end
-  end
+
+    -- identify ourselves to the gateway
+    local identify = {
+      op = 2,
+      d = {
+        token = token,
+        intents = 513,
+        properties = {
+          os = "windows",
+          browser = "lunacord",
+          device = "lunacord"
+        }
+      }
+    }
+    dump("identifying with ", identify)
+    self.ds:send(identify)
+    print("identified!")
+
+    -- gateway event handling loop
+    while true do
+      dump("event", self.ds:receive())
+    end
+  end)
 end
 
 -- class shenanegans (they're epic tho)

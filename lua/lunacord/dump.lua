@@ -20,13 +20,13 @@ local function indent(layer, value)
   return string.rep("  ", layer) .. value
 end
 
-local function dump(variable, layer, inline)
+local function raw(variable, layer, inline)
   local ret = ""
   layer = layer or 0
   if type(variable) == "table" then
     ret = ret .. "{\n"
     for key, value in pairs(variable) do
-      ret = ret .. indent(layer + 1, "[" .. colorize(key) .. "] = " .. dump(value, layer + 1, true)) .. ",\n"
+      ret = ret .. indent(layer + 1, "[" .. colorize(key) .. "] = " .. raw(value, layer + 1, true)) .. ",\n"
     end
     ret = ret .. indent(layer, "}")
   else
@@ -37,17 +37,22 @@ local function dump(variable, layer, inline)
   return ret
 end
 
+local function dump(...)
+  local ret = ""
+  for _, value in ipairs(table.pack(...)) do
+    ret = ret .. raw(value) .. "\t"
+  end
+  return ret
+end
+
 --- Return value is callable and will print directly to stdio. \
 --- Dumps the provided values, recusring through tables. \
 --- DOES NOT YET PROTECT AGAINST SELF-REFERENCES!!
 return setmetatable({
-  raw = dump
+  raw = raw,
+  dump = dump
 }, {
   __call = function(_, ...)
-    local ret = ""
-    for _, value in ipairs(table.pack(...)) do
-      ret = ret .. dump(value) .. "\t"
-    end
-    print(ret)
+    print(dump(...))
   end
 })

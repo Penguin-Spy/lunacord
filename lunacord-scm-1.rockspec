@@ -19,7 +19,8 @@ description = {
 dependencies = {
   "lua >= 5.1",
   "lua-websockets",
-  "lunajson"
+  "lunajson",
+  "copas"
 }
 
 build = {
