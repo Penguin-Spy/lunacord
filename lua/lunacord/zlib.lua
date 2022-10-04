@@ -183,7 +183,8 @@ local function createCodeTable(code_lengths)
   -- Step 1
   local maxLength = 0
   local bl_count = {}
-  for _, length in pairs(code_lengths) do
+  for n = 0, #code_lengths do -- loop through sequentially so that codes of equal length are decoded in the correct order
+    local length = code_lengths[n]
     maxLength = math.max(maxLength, length)
     bl_count[length] = (bl_count[length] or 0) + 1
   end
@@ -199,7 +200,8 @@ local function createCodeTable(code_lengths)
 
   -- Step 3
   local code_table = {}
-  for n, length in pairs(code_lengths) do
+  for n = 0, #code_lengths do
+    local length = code_lengths[n]
     if length ~= 0 then
       code_table[n] = { length, next_code[length] }
       next_code[length] = next_code[length] + 1
