@@ -392,6 +392,8 @@ local function inflateBlock(stream)
   local is_last = getBits(stream, 1) == 1
   local block_type = getBits(stream, 2)
 
+  if is_last then stream.state = 2 end -- finalize the stream when reaching the last block (regardless of if there's a STORE 0 block)
+
   if block_type == 0 then
     return decompressStore(stream) or is_last
   elseif block_type == 1 then
@@ -406,50 +408,81 @@ local function inflateBlock(stream)
 end
 
 --
+--- Internal function for handling stream decompression
+--- @param data string    The compressed data
+--- @return string result The result of the decompression
+--- @return boolean final `true` if the end of the stream has been reached (encountered an is_last=1 block)
+local function stream_decompress(self, data)
+  if self.state >= 2 then
+    error("[zlib] decompress called on finalized stream!")
+  end
+
+  -- Clear stream state for decompressing new data section
+  self.pos = 1 --         byte position in buffer
+  self.bits = 0 --        bit buffer
+  self.bit_count = 0 --   number of bits in buffer
+  self.result = "" --     decompressed data
+  self.buffer = data --   string, byte buffer
+
+  -- Read zlib header
+  if self.state == 0 then
+    -- Compression Method and flags
+    local cmf = peekBits(self, 8)
+    local method, info = getBits(self, 4), getBits(self, 4)
+    if not (method == 8) then
+      error("[zlib] Invalid compression method (" .. method .. ")")
+    end
+    if info > 7 then
+      error("[zlib] Invalid compression info (" .. info .. ")")
+    end
+
+    -- FLaGs [sic]
+    local flg = peekBits(self, 8)
+    local fcheck, fdict, flevel = getBits(self, 5), getBits(self, 1) == 1, getBits(self, 2)
+    if not (((cmf * 256 + flg) % 31) == 0) then
+      error("[zlib] FCHECK failed, zlib header is invalid")
+    end
+    if fdict then
+      error("[zlib] FDICT is not supported")
+    end
+
+    self.state = 1 -- initalization complete
+  end
+
+  -- Decompress all blocks
+  repeat
+    local is_last = inflateBlock(self)
+  until is_last
+
+  return self.result, (self.state >= 2)
+end
+
+--
 --- Decompresses a zlib-deflate block of data. \
 --- If an error occurs while decompressing, `error()` is called with an error message.
 --- @param data string The compressed data
 --- @return string #   The result of the decompression
 --
 function zlib.decompress(data)
-  local stream = {
-    buffer = data, --   string, byte buffer
-    pos = 1, --         byte position in buffer
-    bits = 0, --        bit buffer
-    bit_count = 0, --   number of bits in buffer
-    result = "" --      decompressed data
-  }
-
-  -- Compression Method and flags
-  local cmf = peekBits(stream, 8)
-  local method, info = getBits(stream, 4), getBits(stream, 4)
-  if not (method == 8) then
-    error("[zlib] Invalid compression method (" .. method .. ")")
-  end
-  if info > 7 then
-    error("[zlib] Invalid compression info (" .. info .. ")")
-  end
-
-  -- FLaGs [sic]
-  local flg = peekBits(stream, 8)
-  local fcheck, fdict, flevel = getBits(stream, 5), getBits(stream, 1) == 1, getBits(stream, 2)
-  if not (((cmf * 256 + flg) % 31) == 0) then
-    error("[zlib] FCHECK failed, zlib header is invalid")
-  end
-  if fdict then
-    error("[zlib] FDICT is not supported")
-  end
-
-  -- Decompress all blocks
-  repeat
-    local is_last = inflateBlock(stream)
-  until is_last
-
-  return stream.result
+  return zlib.stream():decompress(data)
 end
 
 function zlib.compress(data)
   error("[zlib] compression is not implemented")
+end
+
+--
+--- Creates a zlib stream. \
+--- Call `stream:decompress(data)` to decompress the segment of data. Stream segments should be seperated by 0-length STORE blocks. \
+--- The first call must have the zlib header. Returns the result of that data block and if the stream has ended.
+--- @return table # The stream.
+--
+function zlib.stream()
+  return {
+    state = 0, -- 0=uninitalized, 1=valid, 2=ended
+
+    decompress = stream_decompress
+  }
 end
 
 return zlib

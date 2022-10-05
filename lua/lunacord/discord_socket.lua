@@ -11,6 +11,7 @@ local DS = {}
 
 function DS:connect()
   self.ws = websocket()
+  self.stream = zlib.stream()
 
   local sucess, err, res = self.ws:connect(gateway_uri, nil, ssl_params)
   if not sucess then
@@ -26,12 +27,14 @@ end
 function DS:receive()
   local payload, opcode, was_clean, code, reason = self.ws:receive()
   if payload then
-    dump(payload, opcode)
+    dump(opcode, payload)
     local data
     if opcode == 1 then -- text frame
       data = json.decode(payload)
     elseif opcode == 2 then -- binary frame (zlib compressed)
-      data = json.decode(zlib.decompress(payload))
+      local decomp = self.stream:decompress(payload)
+      dump("decomp", decomp)
+      data = json.decode(decomp)
     else
       error("[lunacord] invalid opcode: " .. tostring(opcode))
     end
