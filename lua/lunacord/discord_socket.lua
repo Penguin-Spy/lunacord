@@ -4,11 +4,11 @@ local zlib = require 'lunacord.zlib'
 local dump = require 'lunacord.dump'
 
 local gateway_uri = "wss://gateway.discord.gg/?encoding=json&v=9&compress=zlib-stream"
---local gateway_uri = "ws://localhost:8080/"
 local ssl_params = { mode = "client", protocol = "any" }
 
 local DS = {}
 
+-- Connect to the gateway
 function DS:connect()
   self.ws = websocket()
   self.stream = zlib.stream()
@@ -20,20 +20,26 @@ function DS:connect()
     ))
   end
   dump("res", res)
+
+  -- receive hello
+  --   start heartbeat loop
+  -- identify
+
 end
 
---- @return table data The recieved event payload
+--- Receive a raw payload from the websocket
+--- @param self table   The DiscordSocket to receive on
+--- @return table data  The received payload
 --- @nodiscard
-function DS:receive()
+local function websocket_receive(self)
   local payload, opcode, was_clean, code, reason = self.ws:receive()
+
   if payload then
-    dump(opcode, payload)
     local data
     if opcode == 1 then -- text frame
       data = json.decode(payload)
     elseif opcode == 2 then -- binary frame (zlib compressed)
       local decomp = self.stream:decompress(payload)
-      dump("decomp", decomp)
       data = json.decode(decomp)
     else
       error("[lunacord] invalid opcode: " .. tostring(opcode))
@@ -47,6 +53,15 @@ function DS:receive()
       reason = reason
     }))
   end
+end
+
+--- Receive an event from the gateway
+--- @return table data The received event payload
+--- @nodiscard
+function DS:receive()
+  local event = websocket_receive(self)
+
+  return event
 end
 
 function DS:send(data)

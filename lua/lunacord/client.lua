@@ -10,7 +10,7 @@ local Client = {}
 --
 --- Register an event handler
 --- @param event string     Then name of the event
---- @param handler function The function to be called when the client recieves this event
+--- @param handler function The function to be called when the client receives this event
 --
 function Client:on(event, handler)
   self.handlers[event] = handler
@@ -50,7 +50,7 @@ function Client.connect(self, token)
         }
       end)]=]
     else
-      error("[lunacord] did not recieve hello event as first event")
+      error("[lunacord] did not receive hello event as first event")
     end
 
     -- identify ourselves to the gateway

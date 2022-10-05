@@ -260,9 +260,13 @@ local function decodeTree(stream, ll_tree, dist_tree)
       end
 
       local br_start = #stream.result - dist
-      local backreference = sub(stream.result, br_start + 1, br_start + length)
-
-      stream.result = stream.result .. backreference
+      if length > dist then --backreferences may be longer than they their distance. string.sub doesn't handle that properly
+        for i = br_start + 1, br_start + length do
+          stream.result = stream.result .. sub(stream.result, i, i)
+        end
+      else
+        stream.result = stream.result .. sub(stream.result, br_start + 1, br_start + length)
+      end
     end
   until symbol == 256
 end
@@ -312,6 +316,9 @@ local function decompressDynamic(stream)
 
   -- decode Code Length codes --
   local cl_lengths = {}
+  for i = 0, 18 do
+    cl_lengths[i] = 0
+  end
   for i = 16, 18 do
     cl_lengths[i] = getBits(stream, 3)
   end
@@ -323,9 +330,6 @@ local function decompressDynamic(stream)
     else
       cl_lengths[math.floor(i / 2) + 8] = getBits(stream, 3)
     end
-  end
-  for i = hclen + 1, 15 do
-    cl_lengths[i] = 0
   end
 
   -- turn lengths of each symbol into bits, then into huffman tree
@@ -418,14 +422,17 @@ local function stream_decompress(self, data)
   end
 
   -- Clear stream state for decompressing new data section
-  self.pos = 1 --         byte position in buffer
   self.bits = 0 --        bit buffer
   self.bit_count = 0 --   number of bits in buffer
-  self.result = "" --     decompressed data
-  self.buffer = data --   string, byte buffer
 
-  -- Read zlib header
+  self.buffer = (self.buffer or "") .. data
+
+  -- If not initalized, read zlib header
   if self.state == 0 then
+    -- Initalize stream state
+    self.pos = 1
+    self.result = ""
+
     -- Compression Method and flags
     local cmf = peekBits(self, 8)
     local method, info = getBits(self, 4), getBits(self, 4)
@@ -449,12 +456,15 @@ local function stream_decompress(self, data)
     self.state = 1 -- initalization complete
   end
 
+  local start_pos = #self.result + 1 -- save pos of start of new results
+
   -- Decompress all blocks
   repeat
     local is_last = inflateBlock(self)
   until is_last
 
-  return self.result, (self.state >= 2)
+  -- return just the new data (the previous results are kept for backreferences)
+  return sub(self.result, start_pos), (self.state >= 2)
 end
 
 --
