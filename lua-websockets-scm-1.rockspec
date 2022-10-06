@@ -4,19 +4,20 @@ package = "lua-websockets"
 version = "scm-1"
 
 source = {
-  url = "git://github.com/lipp/lua-websockets.git",
+  url = "git://github.com/Penguin-Spy/lua-websockets.git",
 }
 
 description = {
-  summary = "Websockets for Lua",
-  homepage = "http://github.com/lipp/lua-websockets",
+  summary = "Websockets for Lua 5.4",
+  homepage = "http://github.com/Penguin-Spy/lua-websockets",
   license = "MIT/X11",
   detailed = "Provides sync and async clients and servers for copas and lua-ev."
 }
 
 dependencies = {
-  "lua >= 5.1",
+  "lua >= 5.4",
   "luasocket",
+  "bit32",
   "luasec"
 }
 

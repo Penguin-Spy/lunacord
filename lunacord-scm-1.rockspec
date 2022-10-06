@@ -3,7 +3,7 @@
 package = "Lunacord"
 version = "scm-1"
 source = {
-  url = "git://github.com/Penguin-Spy/lunacord"
+  url = "git://github.com/Penguin-Spy/lunacord.git"
 }
 
 description = {
@@ -17,7 +17,7 @@ description = {
   license = "MIT"
 }
 dependencies = {
-  "lua >= 5.1",
+  "lua >= 5.4",
   "lua-websockets",
   "lunajson",
   "copas"
