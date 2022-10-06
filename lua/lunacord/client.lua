@@ -1,7 +1,6 @@
 local copas = require 'copas'
 
 local discord_socket = require 'lunacord.discord_socket'
-local cache = require 'lunacord.cache'
 local dump = require 'lunacord.dump'
 
 -- the Client class
@@ -25,7 +24,18 @@ function Client.connect(self, token)
 
   copas.addnamedthread("lunacord_client_gateway_loop", function()
     self.token = token
-    self.cache = cache()
+    self.cache = {
+      guilds = {}, -- contain their Members
+      channels = {}, -- channel objects contain all their messages
+      users = {},
+
+      applications = {},
+      webhooks = {},
+      invites = {}
+
+      -- potentially other stuff like stage-instances and whatnot
+    }
+
     self.ds = discord_socket()
 
     local ready = self.ds:connect {
@@ -42,7 +52,7 @@ function Client.connect(self, token)
     self.user = ready.user
     self.session_id = ready.session_id
     for _, guild in ipairs(ready.guilds) do
-      self.cache:add_guild(guild)
+      self.cache.guilds[guild.id] = guild
     end
 
     print("< Connected as " .. self.user.username .. "#" .. self.user.discriminator .. " (" .. self.user.id .. ")!")
@@ -50,8 +60,14 @@ function Client.connect(self, token)
 
     -- gateway event handling loop
     while true do
-      self.ds:receive()
-      --dump("event", self.ds:receive())
+      local event_name, event_data = self.ds:receive()
+
+      if event_name ~= "GUILD_CREATE" then
+        print("< Dispatch " .. dump.colorize(event_name) .. ": ", dump.raw(event_data, 1))
+      else
+        print("< Dispatch " .. dump.colorize(event_name) .. ": ", event_data.name .. " (" .. event_data.id .. ")")
+      end
+
     end
   end)
 end

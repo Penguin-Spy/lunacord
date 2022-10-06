@@ -98,37 +98,33 @@ function DS:connect(identify_data)
 end
 
 --- Receive an event from the gateway
---- @return table data The received event payload
+--- @return string name The event name
+--- @return table data  The event data
 --- @nodiscard
 function DS:receive()
-  local event = raw_receive(self)
+  while true do -- only return a gateway dispatch, internally handle all other opcodes
+    local event = raw_receive(self)
 
-  if event.op == 0 then -- Gateway event dispatch
-    self.last_sequence = event.s
-    local event_name = event.t
-    if event_name ~= "GUILD_CREATE" then
-      dump(event_name, event.d)
+    if event.op == 0 then -- Gateway event dispatch
+      self.last_sequence = event.s
+      return event.t, event.d
+
+    elseif event.op == 1 then -- Heartbeat request
+      print("< Discord requested immediate heartbeat.\n(we cant do this yet, oops)")
+
+    elseif event.op == 7 then -- Reconnect
+      print("< Discord requested reconnect & resume.\n(we cant do this yet, oops)")
+
+    elseif event.op == 9 then -- Invalid Session
+      print("< Session invalidated.\n(we should reconnect but we can't yet)")
+
+    elseif event.op == 11 then -- Heartbeat ACK
+      print("< Heartbeat ACK")
+
     else
-      dump(event_name, (event.d.name or "unavailable") .. " (" .. event.d.id .. ")")
+      error("[lunacord] Invalid gateway opcode: " .. tostring(event.op))
     end
-
-  elseif event.op == 1 then -- Heartbeat request
-    print("Discord requested immediate heartbeat.\n(we cant do this yet, oops)")
-
-  elseif event.op == 7 then -- Reconnect
-    print("Discord requested reconnect & resume.\n(we cant do this yet, oops)")
-
-  elseif event.op == 9 then -- Invalid Session
-    print("Session invalidated.\n(we should reconnect but we can't yet)")
-
-  elseif event.op == 11 then -- Heartbeat ACK
-    print("< Heartbeat ACK")
-
-  else
-    error("[lunacord] Invalid gateway opcode: " .. tostring(event.op))
   end
-
-  return event
 end
 
 function DS:send(data)
