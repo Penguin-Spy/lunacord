@@ -50,7 +50,8 @@ end
 --- DOES NOT YET PROTECT AGAINST SELF-REFERENCES!!
 return setmetatable({
   raw = raw,
-  dump = dump
+  dump = dump,
+  colorize = colorize
 }, {
   __call = function(_, ...)
     print(dump(...))

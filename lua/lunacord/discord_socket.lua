@@ -1,7 +1,6 @@
 local websocket = require 'websocket.client_copas'
 local json = require 'lunajson'
-local copas = require("copas")
-local timer = require("copas.timer")
+local timer = require 'copas.timer'
 
 local zlib = require 'lunacord.zlib'
 local dump = require 'lunacord.dump'
@@ -28,7 +27,6 @@ local function raw_receive(self)
     else
       error("[lunacord] invalid opcode: " .. tostring(opcode))
     end
-    print("\treceive: " .. tostring(data))
     return data
   else
     error(dump.dump("[lunacord] WebSocket disconnected", {
@@ -42,6 +40,7 @@ end
 --
 --- Connect to the gateway
 --- @param identify_data table  The data of the identify send event
+--- @return table #             The data of the ready gateway event
 --
 function DS:connect(identify_data)
   self.ws = websocket()
@@ -57,32 +56,26 @@ function DS:connect(identify_data)
 
   -- receive & handle hello event
   local hello = raw_receive(self)
-  dump("hello", hello)
   if hello and hello.op == 10 then
     local heartbeat_interval = hello.d.heartbeat_interval
-    dump("heartbeat_interval", heartbeat_interval)
 
-    --copas.addnamedthread("lunacord_heartbeat", function()
     local delay = heartbeat_interval / 1000
-    local initial_delay = math.random() * delay * 0.5
-    dump {
-      delay = delay,
-      initial_delay = initial_delay
-    }
+    local initial_delay = math.random() * delay
     timer.new {
       name = "lunacord_heartbeat_timer",
       delay = delay,
       initial_delay = initial_delay,
       recurring = true,
-      callback = function(timer_obj)
-        dump("timer", timer_obj)
+      callback = function()
+        print("> Heartbeating with sequence: " .. self.last_sequence)
         self:send {
           op = 1,
           d = self.last_sequence
         }
       end
     }
-    --end)
+
+    print("< Heartbeating at interval " .. delay .. "s (inital: " .. initial_delay .. "s)")
   else
     error("[lunacord] did not receive hello event as first event")
   end
@@ -92,13 +85,16 @@ function DS:connect(identify_data)
     op = 2,
     d = identify_data
   }
-  dump("identifying with ", identify)
   self:send(identify)
 
+  -- receive & handle ready event
   local ready = raw_receive(self)
-  dump("recieved ready!", ready)
-
-  print("discord_socket is connected!")
+  if ready and ready.op == 0 and ready.t == "READY" then
+    self.last_sequence = ready.s
+    return ready.d
+  else
+    error("[lunacord] did not receive ready event as first gateway event")
+  end
 end
 
 --- Receive an event from the gateway
@@ -126,7 +122,7 @@ function DS:receive()
     print("Session invalidated.\n(we should reconnect but we can't yet)")
 
   elseif event.op == 11 then -- Heartbeat ACK
-    print("Heartbeat ACK")
+    print("< Heartbeat ACK")
 
   else
     error("[lunacord] Invalid gateway opcode: " .. tostring(event.op))
@@ -136,9 +132,7 @@ function DS:receive()
 end
 
 function DS:send(data)
-  local encoded = json.encode(data)
-  print("\tsending: " .. tostring(encoded))
-  self.ws:send(encoded)
+  self.ws:send(json.encode(data))
 end
 
 return function()

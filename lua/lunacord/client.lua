@@ -1,6 +1,7 @@
-local copas = require("copas")
+local copas = require 'copas'
 
 local discord_socket = require 'lunacord.discord_socket'
+local cache = require 'lunacord.cache'
 local dump = require 'lunacord.dump'
 
 -- the Client class
@@ -24,9 +25,10 @@ function Client.connect(self, token)
 
   copas.addnamedthread("lunacord_client_gateway_loop", function()
     self.token = token
+    self.cache = cache()
     self.ds = discord_socket()
 
-    self.ds:connect {
+    local ready = self.ds:connect {
       token = token,
       intents = 513,
       properties = {
@@ -35,6 +37,16 @@ function Client.connect(self, token)
         device = "lunacord"
       }
     }
+
+    -- process Ready event
+    self.user = ready.user
+    self.session_id = ready.session_id
+    for _, guild in ipairs(ready.guilds) do
+      self.cache:add_guild(guild)
+    end
+
+    print("< Connected as " .. self.user.username .. "#" .. self.user.discriminator .. " (" .. self.user.id .. ")!")
+    print("  Resume url: ", dump.raw(ready.resume_gateway_url))
 
     -- gateway event handling loop
     while true do
