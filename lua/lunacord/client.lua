@@ -1,6 +1,7 @@
 local copas = require 'copas'
 
 local discord_socket = require 'lunacord.discord_socket'
+local cache = require 'lunacord.cache'
 local dump = require 'lunacord.dump'
 
 -- the Client class
@@ -24,17 +25,7 @@ function Client.connect(self, token)
 
   copas.addnamedthread("lunacord_client_gateway_loop", function()
     self.token = token
-    self.cache = {
-      guilds = {}, -- contain their Members
-      channels = {}, -- channel objects contain all their messages
-      users = {},
-
-      applications = {},
-      webhooks = {},
-      invites = {}
-
-      -- potentially other stuff like stage-instances and whatnot
-    }
+    self.cache = cache()
 
     self.ds = discord_socket()
 
@@ -51,12 +42,13 @@ function Client.connect(self, token)
     -- process Ready event
     self.user = ready.user
     self.session_id = ready.session_id
+    self.resume_gateway_url = ready.resume_gateway_url
     for _, guild in ipairs(ready.guilds) do
-      self.cache.guilds[guild.id] = guild
+      self.cache:add_guild(guild)
     end
 
     print("< Connected as " .. self.user.username .. "#" .. self.user.discriminator .. " (" .. self.user.id .. ")!")
-    print("  Resume url: ", dump.raw(ready.resume_gateway_url))
+    print("  Resume url: ", dump.raw(self.resume_gateway_url))
 
     -- gateway event handling loop
     while true do

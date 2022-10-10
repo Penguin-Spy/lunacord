@@ -39,10 +39,10 @@ end
 
 --
 --- Connect to the gateway
---- @param identify_data table  The data of the identify send event
+--- @param identify table  The data of the identify send event
 --- @return table #             The data of the ready gateway event
 --
-function DS:connect(identify_data)
+function DS:connect(identify)
   self.ws = websocket()
   self.stream = zlib.stream()
 
@@ -81,11 +81,10 @@ function DS:connect(identify_data)
   end
 
   -- identify ourselves to the gateway
-  local identify = {
+  self:send {
     op = 2,
-    d = identify_data
+    d = identify
   }
-  self:send(identify)
 
   -- receive & handle ready event
   local ready = raw_receive(self)
