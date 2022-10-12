@@ -1,6 +1,4 @@
-local copas = require 'copas'
-
 return {
   client = require 'lunacord.client',
-  run = function() copas() end
+  run = require 'lunacord.run'.run
 }

@@ -78,7 +78,7 @@ local function hello(self)
     local heartbeat_interval = hello.d.heartbeat_interval
 
     local delay = heartbeat_interval / 1000
-    local initial_delay = math.max(math.random() * delay, 5) -- wait at least 5 secs before initial heartbeat
+    local initial_delay = math.random() * (delay - 5) + 5 -- wait at least 5 secs before initial heartbeat
     self.heartbeat_acknowledge = true -- so initial heartbeat succeeds
 
     if self.heartbeat_timer then
@@ -160,6 +160,8 @@ function Gateway:receive()
       print("< Websocket disconnected | (" .. tostring(was_clean) .. ") " .. tostring(code) .. ": " .. reason)
       if code == 4004 or code >= 4010 then -- do not reconnect
         error("[lunacord] Disconnected with code " .. code .. " (" .. reason .. "), not reconnecting")
+      elseif code == 1000 then
+        return "LUNACORD_CLOSE", {}
       else
         -- (code == 1005 or code == 1006) -- no close code, should reconnect
         self:reconnect(code ~= 4007 and code ~= 4009) -- sequence/session invalid, should not resume
@@ -199,6 +201,12 @@ end
 
 function Gateway:send(data)
   self.ws:send(json.encode(data))
+end
+
+function Gateway:close()
+  self.heartbeat_timer:cancel()
+  self.ws:close(1000, "Disconnecting")
+  return self.session_id
 end
 
 return function()

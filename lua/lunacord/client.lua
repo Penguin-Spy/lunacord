@@ -1,5 +1,6 @@
 local copas = require 'copas'
 
+local register = require 'lunacord.run'.register
 local gateway = require 'lunacord.gateway'
 local cache = require 'lunacord.cache'
 local dump = require 'lunacord.dump'
@@ -21,7 +22,7 @@ end
 --- This method does not return until the client disconnects.
 --- @param token string The bot token to authorize with
 --
-function Client.connect(self, token)
+function Client:connect(token)
 
   copas.addnamedthread("lunacord_client_gateway_loop", function()
     self.token = token
@@ -39,9 +40,12 @@ function Client.connect(self, token)
       }
     }
 
+    register(self)
+
     -- gateway event handling loop
     while true do
       local event_name, event_data = self.gateway:receive()
+      if event_name == "LUNACORD_CLOSE" then break end
 
       if event_name == "GUILD_CREATE" then
         print("< Dispatch " .. dump.colorize(event_name) .. ": ", event_data.name .. " (" .. event_data.id .. ")")
@@ -59,6 +63,11 @@ function Client.connect(self, token)
 
     end
   end)
+end
+
+-- Cleanly disconnects from Discord
+function Client:disconnect()
+  return self.gateway:close()
 end
 
 -- class shenanegans (they're epic tho)
