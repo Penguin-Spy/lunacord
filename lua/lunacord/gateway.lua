@@ -9,7 +9,7 @@ local dump = require 'lunacord.dump'
 local gateway_options = "/?encoding=json&v=9&compress=zlib-stream"
 local default_ssl_params = { mode = "client", protocol = "any" }
 
-local DS = {}
+local Gateway = {}
 
 
 -- [[ Local gateway communcation methods ]] --
@@ -58,7 +58,7 @@ end
 
 -- Init and connect websocket
 -- exposed to allow sharding & whatnot
-function DS:_open(url, ws_protocol, ssl_params)
+function Gateway:_open(url, ws_protocol, ssl_params)
   self.ws = websocket()
   self.stream = zlib.stream()
 
@@ -113,7 +113,7 @@ end
 
 -- Connect to the gateway
 --- @param identify_data table  The data of the identify send event
-function DS:connect(identify_data)
+function Gateway:connect(identify_data)
   self:_open("wss://gateway.discord.gg" .. gateway_options, nil, default_ssl_params)
   hello(self)
   identify(self, identify_data)
@@ -121,7 +121,7 @@ end
 
 -- Reconnect to the gateway
 --- @param resume boolean Should the session be resumed?
-function DS:reconnect(resume)
+function Gateway:reconnect(resume)
   if self.ws.state ~= "CLOSED" then -- close current connection before reconnecting
     local was_clean, code, reason = self.ws:close(1000)
     print(was_clean, code, reason)
@@ -152,7 +152,7 @@ end
 --- @return string name The event name
 --- @return table data  The event data
 ---@nodiscard
-function DS:receive()
+function Gateway:receive()
   while true do -- only return a gateway dispatch, internally handle all other opcodes
     local event, was_clean, code, reason = raw_receive(self)
 
@@ -197,10 +197,10 @@ function DS:receive()
   end
 end
 
-function DS:send(data)
+function Gateway:send(data)
   self.ws:send(json.encode(data))
 end
 
 return function()
-  return setmetatable({}, { __index = DS })
+  return setmetatable({}, { __index = Gateway })
 end

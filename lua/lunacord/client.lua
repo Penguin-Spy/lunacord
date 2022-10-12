@@ -1,6 +1,6 @@
 local copas = require 'copas'
 
-local discord_socket = require 'lunacord.discord_socket'
+local gateway = require 'lunacord.gateway'
 local cache = require 'lunacord.cache'
 local dump = require 'lunacord.dump'
 
@@ -27,9 +27,9 @@ function Client.connect(self, token)
     self.token = token
     self.cache = cache()
 
-    self.ds = discord_socket()
+    self.gateway = gateway()
 
-    self.ds:connect {
+    self.gateway:connect {
       token = token,
       intents = 513,
       properties = {
@@ -41,7 +41,7 @@ function Client.connect(self, token)
 
     -- gateway event handling loop
     while true do
-      local event_name, event_data = self.ds:receive()
+      local event_name, event_data = self.gateway:receive()
 
       if event_name == "GUILD_CREATE" then
         print("< Dispatch " .. dump.colorize(event_name) .. ": ", event_data.name .. " (" .. event_data.id .. ")")
