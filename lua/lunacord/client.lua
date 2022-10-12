@@ -29,7 +29,7 @@ function Client.connect(self, token)
 
     self.ds = discord_socket()
 
-    local ready = self.ds:connect {
+    self.ds:connect {
       token = token,
       intents = 513,
       properties = {
@@ -39,25 +39,22 @@ function Client.connect(self, token)
       }
     }
 
-    -- process Ready event
-    self.user = ready.user
-    self.session_id = ready.session_id
-    self.resume_gateway_url = ready.resume_gateway_url
-    for _, guild in ipairs(ready.guilds) do
-      self.cache:add_guild(guild)
-    end
-
-    print("< Connected as " .. self.user.username .. "#" .. self.user.discriminator .. " (" .. self.user.id .. ")!")
-    print("  Resume url: ", dump.raw(self.resume_gateway_url))
-
     -- gateway event handling loop
     while true do
       local event_name, event_data = self.ds:receive()
 
-      if event_name ~= "GUILD_CREATE" then
-        print("< Dispatch " .. dump.colorize(event_name) .. ": ", dump.raw(event_data, 1))
-      else
+      if event_name == "GUILD_CREATE" then
         print("< Dispatch " .. dump.colorize(event_name) .. ": ", event_data.name .. " (" .. event_data.id .. ")")
+
+      elseif event_name == "READY" then
+        self.user = event_data.user
+        for _, guild in ipairs(event_data.guilds) do
+          self.cache:add_guild(guild)
+        end
+        print("< Connected as " .. self.user.username .. "#" .. self.user.discriminator .. " (" .. self.user.id .. ")!")
+
+      else
+        print("< Dispatch " .. dump.colorize(event_name) .. ": ", dump.raw(event_data, 1))
       end
 
     end
