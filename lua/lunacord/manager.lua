@@ -6,15 +6,16 @@ local function register(client)
 end
 
 local function run()
+  local success, msg
   repeat
-    local success, err = pcall(copas.step)
+    success, msg = pcall(copas.step)
     if not success then
-      if err == "interrupted!" or err:sub(-12) == "interrupted!" then
+      if msg:sub(-12) == "interrupted!" then
         -- caught Ctrl+C or other quit signal
         print("[lunacord] Caught quit signal, disconnecting all clients")
       else
-        -- actual error
-        print(debug.traceback(err))
+        -- encountered an actual error
+        print(debug.traceback(msg))
       end
 
       -- disconnect all clients
@@ -25,6 +26,7 @@ local function run()
       end
     end
   until copas.finished()
+  return success, msg
 end
 
 return {
