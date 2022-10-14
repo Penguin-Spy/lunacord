@@ -6,9 +6,6 @@ local timer = require 'copas.timer'
 local zlib = require 'lunacord.zlib'
 local dump = require 'lunacord.dump'
 
-local gateway_options = "/?encoding=json&v=9&compress=zlib-stream"
-local default_ssl_params = { mode = "client", protocol = "any" }
-
 local Gateway = {}
 
 
@@ -49,24 +46,27 @@ local function heartbeat(self)
     self.heartbeat_acknowledge = false
   else -- zombied connection
     print("  Did not receive heartbeat ACK in time!")
-    self.ws:close(4000, "Heartbeat not ACKd") -- will never return(?) (i love multithreading!!!!)
+    self.ws:close(4000, "Heartbeat not ACKd") -- yields, resumes in :receive()
   end
 end
 
 --
 -- [[ Connecting/Resuming methods ]] --
 
--- Init and connect websocket
--- exposed to allow sharding & whatnot
-function Gateway:_open(url, ws_protocol, ssl_params)
+-- Init and connect websocket. \
+-- Can be called on already used gateway; will re-initalize (will not close websocket!)
+--- @param url string   The gateway url to connect to
+local function open(self, url)
   self.ws = websocket()
   self.stream = zlib.stream()
 
-  print("> Connecting to " .. url)
-  local sucess, err, res = self.ws:connect(url, ws_protocol, ssl_params)
+  local gateway_url = url .. self.cfg.gateway_options
+  print("> Connecting to " .. gateway_url)
+  local sucess, err, res = self.ws:connect(gateway_url, nil, self.cfg.ssl_params, self.cfg.req_headers)
+
   if not sucess then
-    error(dump.dump("[lunacord] WebSocket connection error: " .. err .. "\nresponse headers:",
-      res
+    error(dump.dump("[lunacord] WebSocket connection error: " .. err ..
+      "\nresponse headers:", res
     ))
   end
 end
@@ -81,10 +81,7 @@ local function hello(self)
     local initial_delay = math.random() * (delay - 5) + 5 -- wait at least 5 secs before initial heartbeat
     self.heartbeat_acknowledge = true -- so initial heartbeat succeeds
 
-    if self.heartbeat_timer then
-      local yea, err = self.heartbeat_timer:cancel()
-      dump(yea, err)
-    end
+    if self.heartbeat_timer then self.heartbeat_timer:cancel() end
 
     self.heartbeat_timer = timer.new {
       name = "lunacord_heartbeat_timer",
@@ -101,22 +98,17 @@ local function hello(self)
   end
 end
 
--- Identify ourselves to the Discord gateway; creates new session
-local function identify(self, identify_data)
-  self:send {
-    op = 2,
-    d = identify_data
-  }
-
-  self.identify = identify_data -- save for resuming
-end
-
 -- Connect to the gateway
 --- @param identify_data table  The data of the identify send event
 function Gateway:connect(identify_data)
-  self:_open("wss://gateway.discord.gg" .. gateway_options, nil, default_ssl_params)
+  open(self, "wss://gateway.discord.gg")
   hello(self)
-  identify(self, identify_data)
+
+  self.identify = identify_data -- save for resuming
+  self:send {
+    op = 2, -- Identify
+    d = self.identify
+  }
 end
 
 -- Reconnect to the gateway
@@ -128,7 +120,7 @@ function Gateway:reconnect(resume)
   end
 
   if resume then
-    self:_open(self.resume_gateway_url .. gateway_options, nil, default_ssl_params)
+    open(self, self.resume_gateway_url)
     hello(self)
     self:send {
       op = 6, -- Resume
@@ -139,18 +131,21 @@ function Gateway:reconnect(resume)
       }
     }
     -- at this point, assuming the resume works, discord will begin sending all missed gateway dispatches
-    -- therefore this should only be called inside of :receive()
+    -- therefore :reconnect() should only be called inside of :receive()
 
   else -- New connection
-    self:_open("wss://gateway.discord.gg" .. gateway_options, nil, default_ssl_params)
+    open(self, "wss://gateway.discord.gg")
     hello(self)
-    identify(self, self.identify)
+    self:send {
+      op = 2, -- Identify
+      d = self.identify
+    }
   end
 end
 
 -- Receive an event from the gateway
---- @return string name The event name
---- @return table data  The event data
+--- @return string|nil name The event name (nil when quitting)
+--- @return table data      The event data
 ---@nodiscard
 function Gateway:receive()
   while true do -- only return a gateway dispatch, internally handle all other opcodes
@@ -158,17 +153,18 @@ function Gateway:receive()
 
     if not event then -- websocket disconnected
       print("< Websocket disconnected | (" .. tostring(was_clean) .. ") " .. tostring(code) .. ": " .. reason)
+
       if code == 4004 or code >= 4010 then -- do not reconnect
         error("[lunacord] Disconnected with code " .. code .. " (" .. reason .. "), not reconnecting")
-      elseif code == 1000 then
-        return "LUNACORD_CLOSE", {}
+      elseif code == 1000 then ---@diagnostic disable-next-line: missing-return-value
+        return nil -- indicate client loop should return
       else
         -- (code == 1005 or code == 1006) -- no close code, should reconnect
         self:reconnect(code ~= 4007 and code ~= 4009) -- sequence/session invalid, should not resume
       end
 
     else
-      if event.op == 0 then -- Gateway event dispatch
+      if event.op == 0 and event.t then -- Gateway event dispatch
         self.last_sequence = event.s
         if event.t == "READY" then
           self.session_id = event.d.session_id
@@ -206,9 +202,18 @@ end
 function Gateway:close()
   self.heartbeat_timer:cancel()
   self.ws:close(1000, "Disconnecting")
-  return self.session_id
 end
 
-return function()
-  return setmetatable({}, { __index = Gateway })
+-- params are to allow sharding & whatnot
+--- @param gateway_options? string  The gateway options query string. Defaults to API v9, zlib compression
+--- @param ssl_params? table        SSL params. defaults to something that works idk what it does tho lol
+--- @param req_headers? table       extra headers for connecting to the gateway
+return function(gateway_options, ssl_params, req_headers)
+  return setmetatable({
+    cfg = { -- this instances' values for opening the websocket
+      gateway_options = gateway_options or "/?encoding=json&v=9&compress=zlib-stream",
+      ssl_params = ssl_params or { mode = "client", protocol = "any" },
+      req_headers = req_headers or {}
+    }
+  }, { __index = Gateway })
 end

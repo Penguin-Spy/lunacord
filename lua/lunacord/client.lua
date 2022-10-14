@@ -1,6 +1,6 @@
 local copas = require 'copas'
 
-local register = require 'lunacord.run'.register
+local manager = require 'lunacord.manager'
 local gateway = require 'lunacord.gateway'
 local cache = require 'lunacord.cache'
 local dump = require 'lunacord.dump'
@@ -17,60 +17,66 @@ function Client:on(event, handler)
   self.handlers[event] = handler
 end
 
---
---- Connects to discord, handling all registered events. \
---- This method does not return until the client disconnects.
+-- gateway event handling loop
+-- This method does not return until the client disconnects.
 --- @param token string The bot token to authorize with
---
-function Client:connect(token)
-
-  copas.addnamedthread("lunacord_client_gateway_loop", function()
-    self.token = token
-    self.cache = cache()
-
-    self.gateway = gateway()
-
-    self.gateway:connect {
-      token = token,
-      intents = 513,
-      properties = {
-        os = "windows",
-        browser = "lunacord",
-        device = "lunacord"
-      }
+local function run(self, token)
+  self.identify = self.identify or {
+    token = token,
+    intents = 513, -- should compute via bitwise of registered event handlers w/ client:on(event)
+    properties = {
+      os = "windows",
+      browser = "lunacord",
+      device = "lunacord"
     }
+  }
 
-    register(self)
+  self.gateway:connect(self.identify)
+  manager.register(self)
 
-    -- gateway event handling loop
-    while true do
-      local event_name, event_data = self.gateway:receive()
-      if event_name == "LUNACORD_CLOSE" then break end
+  while true do
+    local event_name, event_data = self.gateway:receive()
+    if event_name == nil then break end
 
-      if event_name == "GUILD_CREATE" then
-        print("< Dispatch " .. dump.colorize(event_name) .. ": ", event_data.name .. " (" .. event_data.id .. ")")
+    if event_name == "GUILD_CREATE" then
+      print("< Dispatch " .. dump.colorize(event_name) .. ": ", event_data.name .. " (" .. event_data.id .. ")")
 
-      elseif event_name == "READY" then
-        self.user = event_data.user
-        for _, guild in ipairs(event_data.guilds) do
-          self.cache:add_guild(guild)
-        end
-        print("< Connected as " .. self.user.username .. "#" .. self.user.discriminator .. " (" .. self.user.id .. ")!")
-
-      else
-        print("< Dispatch " .. dump.colorize(event_name) .. ": ", dump.raw(event_data, 1))
+    elseif event_name == "READY" then
+      self.user = event_data.user
+      for _, guild in ipairs(event_data.guilds) do
+        self.cache:add_guild(guild)
       end
+      print("< Connected as " .. self.user.username .. "#" .. self.user.discriminator .. " (" .. self.user.id .. ")!")
 
+    else
+      print("< Dispatch " .. dump.colorize(event_name) .. ": ", dump.raw(event_data, 1))
+      local handler = self.handlers[event_name]
+      if handler then handler(event_data) end
     end
-  end)
+
+  end
 end
 
 -- Cleanly disconnects from Discord
 function Client:disconnect()
-  return self.gateway:close()
+  self.gateway:close()
 end
 
--- class shenanegans (they're epic tho)
-return function()
-  return setmetatable({}, { __index = Client })
+-- Create a new client. \
+--- The client is not yet connected to Discord. See the `readme.md` for usage. \
+--- Multiple clients can be created and will run simultaneously.
+--- @param token string The token of the bot account
+return function(token)
+  local self = setmetatable({}, { __index = Client })
+
+  self.cache = cache()
+  self.gateway = gateway()
+  self.handlers = {}
+
+  -- run is called with the rest of the parameters
+  self.thread = copas.addnamedthread("lunacord_client_gateway_loop",
+    run, self, token
+  )
+
+  return self
 end
