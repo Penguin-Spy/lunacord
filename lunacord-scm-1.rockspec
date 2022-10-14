@@ -10,8 +10,8 @@ description = {
   summary = "A simple, convenient Discord bot library in pure Lua",
   detailed = [[
     A simple, convenient Discord bot library written in pure Lua.
-    All caching is handled by the library, allowing you to just
-    focus on writing your Discord bot.
+    Everything from receiving gateway events to fetching and caching objects is handled by the library,
+    allowing you to just focus on writing your Discord bot.
   ]],
   homepage = "https://github.com/Penguin-Spy/lunacord",
   license = "MIT"
