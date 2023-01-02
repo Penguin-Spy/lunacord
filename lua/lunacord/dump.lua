@@ -24,11 +24,20 @@ local function raw(variable, layer, inline)
   local ret = ""
   layer = layer or 0
   if type(variable) == "table" then
-    ret = ret .. "{\n"
-    for key, value in pairs(variable) do
-      ret = ret .. indent(layer + 1, "[" .. colorize(key) .. "] = " .. raw(value, layer + 1, true)) .. ",\n"
+    if (layer < 10) then
+      ret = ret .. "{\n"
+      for key, value in pairs(variable) do
+        if not (value == variable) then
+          ret = ret .. indent(layer + 1, "[" .. colorize(key) .. "] = " .. raw(value, layer + 1, true)) .. ",\n"
+        else
+          ret = ret .. indent(
+            layer + 1, "[" .. colorize(key) .. "] = " .. colors["nil"] .. "[ self reference ]" .. colors.RESET .. ",\n")
+        end
+      end
+      ret = ret .. indent(layer, "}")
+    else
+      ret = ret .. colors["nil"] .. "{ more layers }" .. colors.RESET
     end
-    ret = ret .. indent(layer, "}")
   else
     local str = colorize(variable)
     ret = ret .. (inline and str or indent(layer, str))
@@ -46,8 +55,7 @@ local function dump(...)
 end
 
 --- Return value is callable and will print directly to stdio. \
---- Dumps the provided values, recusring through tables. \
---- DOES NOT YET PROTECT AGAINST SELF-REFERENCES!!
+--- Dumps the provided values, recusring through tables.
 return setmetatable({
   raw = raw,
   dump = dump,

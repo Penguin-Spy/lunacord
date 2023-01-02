@@ -1,6 +1,8 @@
 local copas = require 'copas'
 
+---@type Client[]
 local clients = {}
+
 local function register(client)
   table.insert(clients, client)
 end
@@ -8,6 +10,7 @@ end
 local function run()
   local success, msg
   repeat
+    ---@type boolean, string
     success, msg = pcall(copas.step)
     if not success then
       if msg:sub(-12) == "interrupted!" then
