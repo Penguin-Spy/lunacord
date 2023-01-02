@@ -5,7 +5,17 @@ local gateway = require 'lunacord.gateway'
 local cache = require 'lunacord.cache'
 local dump = require 'lunacord.dump'
 
--- the Client class
+--- stop the lang server yelling at me about private vars; everything in this file is allowed to access them
+---@diagnostic disable: invisible
+
+---@class Client
+---@field user User   The bot's user
+--- private fields DO NOT TOUCH
+---@field private cache Cache     This client's Cache instance
+---@field private gateway table   This client's Gateway instance
+---@field private handlers table  Table of all registered event handlers
+---@field private thread thread   The gateway loop thread
+---@field private identify table  The identify payload
 local Client = {}
 
 --
@@ -19,17 +29,11 @@ end
 
 -- gateway event handling loop
 -- This method does not return until the client disconnects.
---- @param token string The bot token to authorize with
-local function run(self, token)
-  self.identify = self.identify or {
-    token = token,
-    intents = 513, -- should compute via bitwise of registered event handlers w/ client:on(event)
-    properties = {
-      os = "windows",
-      browser = "lunacord",
-      device = "lunacord"
-    }
-  }
+--- @param self Client
+local function run(self)
+  if not self.identify.intents then
+    self.identify.intents = 513 -- should compute via bitwise of registered event handlers w/ client:on(event)
+  end
 
   self.gateway:connect(self.identify)
   manager.register(self)
@@ -51,7 +55,11 @@ local function run(self, token)
     else
       print("< Dispatch " .. dump.colorize(event_name) .. ": ", dump.raw(event_data, 1))
       local handler = self.handlers[event_name]
-      if handler then handler(event_data) end
+      if handler then
+        handler(event_data)
+      elseif self.handlers.raw then
+        self.handlers.raw(event_name, event_data)
+      end
     end
 
   end
@@ -66,16 +74,27 @@ end
 --- The client is not yet connected to Discord. See the `readme.md` for usage. \
 --- Multiple clients can be created and will run simultaneously.
 --- @param token string The token of the bot account
+--- @return Client
 return function(token)
+  ---@type Client
   local self = setmetatable({}, { __index = Client })
 
   self.cache = cache()
   self.gateway = gateway()
   self.handlers = {}
 
+  self.identify = {
+    token = token,
+    properties = {
+      os = "linux",
+      browser = "lunacord",
+      device = "lunacord"
+    }
+  }
+
   -- run is called with the rest of the parameters
   self.thread = copas.addnamedthread("lunacord_client_gateway_loop",
-    run, self, token
+    run, self
   )
 
   return self

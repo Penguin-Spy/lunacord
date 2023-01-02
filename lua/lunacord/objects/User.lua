@@ -1,5 +1,7 @@
 ---@class User
 ---@field id snowflake
+---@field username string
+---@field discriminator string
 local User = {}
 
 
